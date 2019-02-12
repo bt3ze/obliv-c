@@ -1103,7 +1103,7 @@ void setupYaoProtocol(ProtocolDesc* pd,bool halfgates)
   pd->currentParty = ocCurrentPartyDefault;
   pd->feedOblivInputs = (me==1?yaoGenrFeedOblivInputs:yaoEvalFeedOblivInputs);
   pd->revealOblivBits = (me==1?yaoGenrRevealOblivBits:yaoEvalRevealOblivBits);
-  pd->revealElGlEncBits = (me==1?yaoGenrRevealElGlBits:yaoEvalRevealElGlBits);
+  pd->revealOblivElGlBits = (me==1?yaoGenrRevealElGlBits:yaoEvalRevealElGlBits);
   if(halfgates)
   { pd->setBitAnd = (me==1?yaoGenerateAndPair:yaoEvaluateHalfGatePair);
     pd->setBitOr  = (me==1?yaoGenerateOrPair :yaoEvaluateHalfGatePair);
