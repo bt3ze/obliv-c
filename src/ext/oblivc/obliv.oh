@@ -65,6 +65,11 @@ bool  revealOblivLongArray(long dest[],  obliv long src[],  size_t n,
 						   int party);
 bool revealOblivLLongArray(long long dest[], obliv long long src[], size_t n,
 						   int party);
+
+
+bool revealOblivElGlChar(char* dest, obliv char src,int party);
+bool  revealOblivElGlCharArray(char dest[],  obliv char src[],  size_t n,
+						   int party);
 #endif
 
 bool ocBroadcastBool(bool v,int party);
