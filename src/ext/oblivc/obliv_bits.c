@@ -1552,6 +1552,11 @@ bool __obliv_c__revealOblivBits (widest_t* dest, const OblivBit* src
                                 ,size_t size, int party)
   { return currentProto->revealOblivBits(currentProto,dest,src,size,party); }
 
+bool __obliv_c__revealOblivElGlBits (widest_t* dest, const OblivBit* src
+                                ,size_t size, int party)
+  { return currentProto->revealOblivElGlBits(currentProto,dest,src,size,party); }
+
+
 void __obliv_c__setSignedKnown
   (void* vdest, size_t size, long long signed value)
 {
@@ -2172,6 +2177,29 @@ revealOblivFun(long long,lLong,LLong);
 revealOblivFun(float,float,Float);
 
 #undef revealOblivFun
+
+#define revealOblivElGlFun(t, ot, tname) \
+      bool revealOblivElGl##tname(t * dest, __obliv_c__##ot src, int party) \
+      { widest_t wd; \
+        if(__obliv_c__revealOblivElGlBits(&wd,src.bits,__bitsize(t),party)) \
+          { *dest=*(t*)&wd; return true; } \
+        return false; \
+      } \
+      bool revealOblivElGl##tname##Array(t *dest, const __obliv_c__##ot * src,\
+                                    size_t n, int party) \
+      { bool rv = true; \
+        if(party!=1) \
+          for (size_t ii = 0; ii < n; ii++) \
+            { rv &= revealOblivElGl##tname(&dest[ii], src[ii], 2); } \
+        if(party!=2) \
+          for (size_t ii = 0; ii < n; ii++) \
+            { rv &= revealOblivElGl##tname(&dest[ii], src[ii], 1); } \
+        return rv; \
+      }
+
+revealOblivElGlFun(char,char,Char);
+
+#undef revealOblivElGlFun
 
 // TODO fix data width
 bool ocBroadcastBool(bool v,int party)
