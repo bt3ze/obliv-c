@@ -27,6 +27,18 @@ extern bool yaoGenrRevealOblivBits(ProtocolDesc* pd,
                 widest_t* dest,const OblivBit* o,size_t n,int party);
 extern bool yaoEvalRevealOblivBits(ProtocolDesc* pd,
                 widest_t* dest,const OblivBit* o,size_t n,int party);
+
+// for ElGl outputs:
+extern bool yaoGenrRevealElGlBits(ProtocolDesc* pd,
+				  widest_t* dest,
+				  const OblivBit* o,
+				  size_t n,int party);
+extern bool yaoEvalRevealElGlBits(ProtocolDesc* pd,
+				  widest_t* dest,
+				  const OblivBit* o,
+				  size_t n,
+				  int party);
+
 extern void yaoGenrFeedOblivInputs(ProtocolDesc* pd
                ,OblivInputs* oi,size_t n,int src);
 extern void yaoEvalFeedOblivInputs(ProtocolDesc* pd

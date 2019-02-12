@@ -847,6 +847,43 @@ bool yaoEvalRevealOblivBits(ProtocolDesc* pd,
   else return false;
 }
 
+
+bool yaoGenrRevealElGlBits(ProtocolDesc* pd,
+    widest_t* dest,const OblivBit* o,size_t n,int party)
+{
+  size_t i,bc=(n+7)/8;
+  widest_t rv=0, flipflags=0;
+  YaoProtocolDesc *ypd = pd->extra;
+  for(i=0;i<n;++i) if(o[i].unknown)
+    flipflags |= ((yaoKeyLsb(o[i].yao.w) != o[i].yao.inverted)?1LL<<i:0);
+  // Assuming little endian
+  if(party != 1) osend(pd,2,&flipflags,bc);
+  if(party != 2) { orecv(pd,2,&rv,bc); rv^=flipflags; }
+  for(i=0;i<n;++i) if(!o[i].unknown && o[i].knownValue)
+    rv |= (1LL<<i);
+  ypd->ocount+=n;
+  if(party!=2) { *dest=rv; return true; }
+  else return false;
+}
+
+bool yaoEvalRevealElGlBits(ProtocolDesc* pd,
+    widest_t* dest,const OblivBit* o,size_t n,int party)
+{
+  size_t i,bc=(n+7)/8;
+  widest_t rv=0, flipflags=0;
+  YaoProtocolDesc* ypd = pd->extra;
+  for(i=0;i<n;++i) if(o[i].unknown)
+    flipflags |= (yaoKeyLsb(o[i].yao.w)?1LL<<i:0);
+  // Assuming little endian
+  if(party != 1) { orecv(pd,1,&rv,bc); rv^=flipflags; }
+  if(party != 2) osend(pd,1,&flipflags,bc);
+  for(i=0;i<n;++i) if(!o[i].unknown && o[i].knownValue)
+    rv |= (1LL<<i);
+  ypd->ocount+=n;
+  if(party!=1) { *dest=rv; return true; }
+  else return false;
+}
+
 // Encodes a 2-input truth table for f(a,b) = (bool)(ttable&(1<<(2*a+b)))
 void yaoGenerateGate(ProtocolDesc* pd, OblivBit* r, char ttable, 
     const OblivBit* a, const OblivBit* b)
@@ -1066,6 +1103,7 @@ void setupYaoProtocol(ProtocolDesc* pd,bool halfgates)
   pd->currentParty = ocCurrentPartyDefault;
   pd->feedOblivInputs = (me==1?yaoGenrFeedOblivInputs:yaoEvalFeedOblivInputs);
   pd->revealOblivBits = (me==1?yaoGenrRevealOblivBits:yaoEvalRevealOblivBits);
+  pd->revealElGlEncBits = (me==1?yaoGenrRevealElGlBits:yaoEvalRevealElGlBits);
   if(halfgates)
   { pd->setBitAnd = (me==1?yaoGenerateAndPair:yaoEvaluateHalfGatePair);
     pd->setBitOr  = (me==1?yaoGenerateOrPair :yaoEvaluateHalfGatePair);

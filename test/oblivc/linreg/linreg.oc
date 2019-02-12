@@ -7,9 +7,9 @@
 
 void toObliv(protocolIO *io, obliv float *oa, float *a, int party) 
 {
-    for(int i = 0; i < io->n; i++) {
-        oa[i] = feedOblivFloat(a[i], party);
-    }
+  for(int i = 0; i < io->n; i++) {
+    oa[i] = feedOblivFloat(a[i], party);
+  }
 }
 
 obliv float osqr(obliv float x) 
@@ -38,9 +38,9 @@ obliv float sum(obliv float *a, int n)
 void linear_regression(protocolIO *io, obliv float *ox, obliv float *oy, 
                        obliv float om, obliv float ob, obliv float or) 
 {
-    int n = io->n;
-    obliv float sumx = sum(ox, n); // sum of x
-    obliv float sumxx = dotProd(ox, ox, n); // sum of each x squared
+  int n = io->n;
+  obliv float sumx = sum(ox, n); // sum of x
+  obliv float sumxx = dotProd(ox, ox, n); // sum of each x squared
     obliv float sumy = sum(oy, n); // sum of y
     obliv float sumyy = dotProd(oy, oy, n); // sum of each y squared
     obliv float sumxy = dotProd(ox, oy, n); // sum of each x * y
