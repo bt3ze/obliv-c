@@ -2,7 +2,7 @@
 #include<gcrypt.h>
 
 // XXX I feel like obliv_common.h doesn't belong here
-#include<obliv_common.h>
+//#include<obliv_common.h>
 
 #define BC_MAXBLEN 20 // internal constant (i.e. private)
 #define BC_SEEDLEN_DEFAULT (128/8)
