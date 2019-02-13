@@ -1,5 +1,6 @@
 #pragma once
 #include<gcrypt.h>
+#include <stdint.h>
 
 // XXX I feel like obliv_common.h doesn't belong here
 //#include<obliv_common.h>
