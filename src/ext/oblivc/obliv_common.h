@@ -50,6 +50,9 @@ static inline int oflush(ProtocolDesc* pd)
 #define DHEltBits 256
 #define DHEltSerialBytes (((DHEltBits+7)/8+2)*2)
 
+static gcry_mpi_t DHModQ,DHModQMinus3; // minus 3?! This is just paranoia
+static gcry_mpi_point_t DHg;           // The group generator of order q
+
 void dhRandomInit(void);
 void dhRandomFinalize(void);
 void dhSerialize(char* buf,gcry_mpi_point_t u,

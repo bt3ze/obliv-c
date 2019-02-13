@@ -25,8 +25,9 @@ inline void printhex(const char* msg,const char* buf,size_t n)
 }
 // ---------------- Diffie Hellman Random Elt Generator ----------------------
 
-static gcry_mpi_t DHModQ,DHModQMinus3; // minus 3?! This is just paranoia
-static gcry_mpi_point_t DHg;           // The group generator of order q
+
+// moved the (static) definitions of DHmodQ, DHModQMinus3, and DHg
+// to obliv_common.h
 
 void setctrFromIntBCipherRandomGen(BCipherRandomGen* gen,uint64_t ctr)
 {
