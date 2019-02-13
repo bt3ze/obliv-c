@@ -1,4 +1,6 @@
 #pragma once
+
+#include <obliv_common.h>
 #include<bcrandom.h>
 #include<obliv_types.h>
 
