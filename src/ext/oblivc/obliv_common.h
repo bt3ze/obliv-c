@@ -7,7 +7,6 @@
 
 #include <gcrypt.h>
 
-
 // Because I am evil and I do not like
 // Java-style redundant "say the type twice" practice
 #define CAST(p) ((void*)p)
@@ -53,8 +52,10 @@ static inline int oflush(ProtocolDesc* pd)
 
 void dhRandomInit(void);
 void dhRandomFinalize(void);
+void dhSerialize(char* buf,gcry_mpi_point_t u,
+		 gcry_ctx_t ctx,gcry_mpi_t x,gcry_mpi_t y);
+void dhDeserialize(gcry_mpi_point_t* p, const char* buf);
 
-gcry_mpi_t dhRandomExp(BCipherRandomGen* gen);
 
 
 static inline void otSenderRelease(OTsender* sender)
