@@ -1,6 +1,7 @@
 #ifndef OBLIV_COMMON_H
 #define OBLIV_COMMON_H
 
+#include <obliv_base.h>
 #include<obliv_types.h>
 //#include<stdio.h>
 //FILE* transGetFile(ProtocolTransport* t); // Debugging API
@@ -28,7 +29,6 @@ static inline int protoCurrentParty(ProtocolDesc* pd)
 static inline char ocCurrentProtoType()
   { return *(char*)ocCurrentProto()->extra; }
 
-void gcryDefaultLibInit(void);
 
 // Convenience functions
 static inline int transSend(ProtocolTransport* t,int d,const void* p,size_t n)
@@ -140,15 +140,5 @@ static inline bool getBit(const char* src,int ind)
 static inline void xorBit(char *dest,int ind,bool v)
   { dest[ind/8]^=(v<<ind%8); }
 
-// C++ doesn't have the restrict keyword
-#ifdef __cplusplus
-static inline void memxor(void *dest, const void *src, size_t n) {
-#else
-static inline void memxor(void *restrict dest, const void *restrict src, size_t n) {
-#endif
-  for(size_t i = 0; i < n; i++) {
-    ((char *) dest)[i] ^= ((char *)src)[i];
-  }
-}
 
 #endif
