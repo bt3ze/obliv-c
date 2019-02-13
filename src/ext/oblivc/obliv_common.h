@@ -5,6 +5,8 @@
 //#include<stdio.h>
 //FILE* transGetFile(ProtocolTransport* t); // Debugging API
 
+#include <gcrypt.h>
+
 
 // Because I am evil and I do not like
 // Java-style redundant "say the type twice" practice
@@ -51,6 +53,9 @@ static inline int oflush(ProtocolDesc* pd)
 
 void dhRandomInit(void);
 void dhRandomFinalize(void);
+
+gcry_mpi_t dhRandomExp(BCipherRandomGen* gen);
+
 
 static inline void otSenderRelease(OTsender* sender)
   { sender->release(sender->sender); }
