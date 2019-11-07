@@ -2,7 +2,7 @@
 #define OBLIV_COMMON_H
 
 #include <obliv_base.h>
-#include<obliv_types.h>
+#include <obliv_types.h>
 //#include<stdio.h>
 //FILE* transGetFile(ProtocolTransport* t); // Debugging API
 
@@ -34,15 +34,30 @@ static inline char ocCurrentProtoType()
 static inline int transSend(ProtocolTransport* t,int d,const void* p,size_t n)
   { return t->send(t,d,p,n); }
 static inline int transRecv(ProtocolTransport* t,int s,void* p,size_t n)
-  { return t->recv(t,s,p,n); }
+  {  return t->recv(t,s,p,n); }
 static inline int transFlush(ProtocolTransport* t)
   { if (t->flush) return t->flush(t); else return 0; }
 static inline int osend(ProtocolDesc* pd,int d,const void* p,size_t n)
-  { return transSend(pd->trans,d,p,n); }
+{    //pd->extra->utilcount++;
+  return transSend(pd->trans,d,p,n); }
 static inline int orecv(ProtocolDesc* pd,int s,void* p,size_t n)
-  { return transRecv(pd->trans,s,p,n); }
+{    return transRecv(pd->trans,s,p,n); }
 static inline int oflush(ProtocolDesc* pd)
   { return transFlush(pd->trans); }
+
+// a few convenience functions for sending gates
+// in the form of osend and orecv
+// the dest and src parameters seem pretty worthless
+// but keeping them in so that they follow the form of osend and orecv
+static inline int transSendGate(ProtocolTransport* t, int dest, const void* p, size_t n)
+{  return t->sendGate(t,dest,p,n); }
+static inline int transRecvGate(ProtocolTransport* t,int src, void* p, size_t n)
+{  return t->recvGate(t,src,p,n); }
+static inline int gateSend(ProtocolDesc* pd,int dest, void* p, size_t n)
+{  return transSendGate(pd->trans,dest,p,n); }
+static inline int gateRecv(ProtocolDesc* pd, int src, void* p, size_t n)
+{  return transRecvGate(pd->trans,src,p,n); }
+
 
 
 // Maybe these 5 lines should move to bcrandom.h

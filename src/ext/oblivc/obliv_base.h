@@ -2,6 +2,9 @@
 #ifndef _OBLIV_BASE_H_
 #define _OBLIV_BASE_H_
 
+// this is a small file that tries to resolve the interdependence of bcrandom and obliv_common// it is by no means a solution, but a band-aid
+// so that i can externalize some diffie-hellman elliptic curve functions
+
 void gcryDefaultLibInit(void);
 
 

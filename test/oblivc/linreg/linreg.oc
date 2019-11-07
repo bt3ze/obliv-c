@@ -56,6 +56,7 @@ void linear_regression(protocolIO *io, obliv float *ox, obliv float *oy,
     revealOblivFloat(&io->rsqr, orsqr, 0);
     revealOblivFloat(&io->m, om, 0);
     revealOblivFloat(&io->b, ob, 0);
+
 }
 
 void check_input_count(protocolIO *io) 
@@ -96,6 +97,9 @@ void linReg(void* args)
     free(y);
 
     linear_regression(io, ox, oy, om, ob, or);
+
+    printf("Number of Gates:\t%ld \n",yaoGateCount());
+    
     free(ox);
     free(oy);
 }

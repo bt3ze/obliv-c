@@ -1,3 +1,4 @@
+
 // TODO I need to fix some int sizes
 #include <obliv_bits.h>
 #include <obliv_float_ops.h>
@@ -15,6 +16,11 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <gcrypt.h>
+
+
+//#define BATCH_GATES
+#define BUFFER_CAPACITY 10000
+#define BUFFER_SIZE BUFFER_CAPACITY*YAO_KEY_BYTES
 
 // Q: What's with all these casts to and from void* ?
 // A: Code generation becomes easier without the need for extraneous casts.
@@ -80,17 +86,35 @@ typedef struct tcp2PTransport
   size_t bytes;
   size_t flushCount;
   struct tcp2PTransport* parent;
+  char* buffer;
+  unsigned int bufctr;
+  unsigned int buf_cap;
+  bool bufNeedFlush;
 } tcp2PTransport;
 
 // Profiling output
 size_t tcp2PBytesSent(ProtocolDesc* pd) { return ((tcp2PTransport*)(pd->trans))->bytes; }
 size_t tcp2PFlushCount(ProtocolDesc* pd) { return ((tcp2PTransport*)(pd->trans))->flushCount; }
 
-static int tcp2PSend(ProtocolTransport* pt,int dest,const void* s,size_t n)
+
+int tcp2PSend(ProtocolTransport* pt,int dest,const void* s,size_t n);
+int tcp2PSendGateBatch(ProtocolTransport* pt, int dest);
+
+
+
+int tcp2PSend(ProtocolTransport* pt,int dest,const void* s,size_t n)
 { 
   struct tcp2PTransport* tcpt = CAST(pt);
   size_t n2=0;
   tcpt->needFlush=true;
+
+
+  #ifdef BATCH_GATES
+  if(tcpt->bufNeedFlush){
+    tcp2PSendGateBatch(pt,dest);
+  }
+  #endif
+  
   while(n>n2) {
     int res = fwrite(n2+(char*)s,1,n-n2,tcpt->sockStream);
     if(res<0) { perror("TCP write error: "); return res; }
@@ -108,9 +132,21 @@ static int tcp2PSendProfiled(ProtocolTransport* pt,int dest,const void* s,size_t
 }
 
 static int tcp2PRecv(ProtocolTransport* pt,int src,void* s,size_t n)
-{ 
+{
   struct tcp2PTransport* tcpt = CAST(pt);
+
+  const int one = 1;
+  //setsockopt(tcpt->sock,IPPROTO_TCP,TCP_QUICKACK, &one,sizeof(one));
+
   int res=0,n2=0;
+
+  #ifdef BATCH_GATES
+  if(tcpt->bufNeedFlush){
+    // dest must be the other party
+    tcp2PSendGateBatch(pt,src);
+  }
+  #endif
+  
   if (tcpt->needFlush)
   {
     transFlush(pt);
@@ -142,6 +178,117 @@ static int tcp2PFlushProfiled(ProtocolTransport* pt)
   return tcp2PFlush(pt);
 }
 
+
+/*
+static int tcp2PRecvGateBatch(ProtocolTransport* pt,int src,void* s)
+{
+  // read a batch of gates
+  // requires reading until feof of the stream
+  // we also want to count how many bytes are sent
+  // so that we can appropriately set the garbling buffer size parameter
+  // to know when to read the next batch
+  
+  struct tcp2PTransport* tcpt = CAST(pt);
+
+
+  fprintf(stderr,"Eval: Receive Buffer\t%u\t%u\n",tcpt->bufctr,tcpt->buf_cap);
+
+  
+  int res=0,n2=0;
+  if (tcpt->needFlush)
+  {
+    transFlush(pt);
+    tcpt->needFlush=false;
+  }
+  // read until you can't anymore
+  // put the results in the garbling buffer
+
+  unsigned int n = tcpt->buf_cap;
+  while(n>n2)
+  { 
+    res = fread(n2+(char*)s,1,n-n2, tcpt->sockStream);
+    if(res<0 || feof(tcpt->sockStream))
+    {
+      perror("TCP read error: ");
+      return res;
+    }
+    n2+=res;
+  }
+  // then set the 
+  return res;
+}
+*/
+
+static int tcp2PRecvGate(ProtocolTransport* pt,int src,void* s,size_t n){
+
+  //  struct tcp2PTransport* t= CAST(pt);
+  
+  // if the garbling buffer is empty,
+  // (meaning the pointer has reached the current size limit
+  // then tcp2PRecvGateBatch.
+  // it will:
+  //   put the result in the buffer,
+  //   update the buffer pointers
+  // then we want to read the first gate and 
+  // return the first gate,
+  // if the buffer is not empty,
+  // then just return the next gate
+  
+  //if(t->bufctr == t->buf_cap){
+  //  int rec = tcp2PRecvGateBatch(pt, src, s);
+  //  t->bufctr=0;
+  //  t->buf_cap=rec;
+  //  fprintf(stderr,"evl received %u gates\n",t->buf_cap);
+  //}
+
+  //memcpy(s,(t->bufctr)*YAO_KEY_BYTES+(char*)(t->buffer),YAO_KEY_BYTES);
+  //t->bufctr++;
+  
+  //return n;
+  return tcp2PRecv(pt,src,s,n);
+}
+
+int tcp2PSendGateBatch(ProtocolTransport* pt, int dest){
+  // send a batch of gates
+  // need to compute how many bytes are actually being sent
+  struct tcp2PTransport* t= CAST(pt);
+  int batchsize = t->bufctr;
+  //fprintf(stderr,"Gen send batch: %i\n",batchsize);
+  t->bufctr=0; // reset the counter as we flush the batch
+  t->bufNeedFlush=false;
+
+  return tcp2PSend(pt,dest,t->buffer,batchsize*YAO_KEY_BYTES);
+}
+
+
+static int tcp2PSendGate(ProtocolTransport* pt, int dest, const void* s, size_t n){
+  // if the buffer is full, then send the buffer with the newest gate
+  // using tcp2PSend
+  // otherwise, add to the buffer, update the pointers, and return
+
+  
+  struct tcp2PTransport* t= CAST(pt);
+  assert(n==YAO_KEY_BYTES);
+
+  memcpy(t->bufctr*YAO_KEY_BYTES+(char*)(t->buffer), s, YAO_KEY_BYTES );
+  
+  if(t->bufctr==t->buf_cap - 1){
+    
+    //fprintf(stderr,"Gen: Send Full Buffer\t%u\n",t->bufctr);
+
+    t->bufctr++;
+    // number of items pending will reset in the call
+    return tcp2PSendGateBatch(pt,dest); //,t->buffer,t->buf_cap);
+ 
+  } else {
+
+    t->bufNeedFlush=true;
+    t->bufctr++;
+
+    return t->bufctr;
+  }  
+}
+
 static void tcp2PCleanup(ProtocolTransport* pt)
 { 
   tcp2PTransport* t = CAST(pt);
@@ -161,6 +308,7 @@ static void tcp2PCleanupProfiled(ProtocolTransport* pt)
   tcp2PCleanup(pt);
 }
 
+/*
 static inline bool transIsTcp2P(ProtocolTransport* pt) { return pt->cleanup == tcp2PCleanup; }
 
 FILE* transGetFile(ProtocolTransport* t)
@@ -168,21 +316,26 @@ FILE* transGetFile(ProtocolTransport* t)
   if(transIsTcp2P(t)) return ((tcp2PTransport*)t)->sockStream;
   else return NULL;
 }
+*/
 
 static ProtocolTransport* tcp2PSplit(ProtocolTransport* tsrc);
 
 static const tcp2PTransport tcp2PTransportTemplate
   = {{.maxParties=2, .split=tcp2PSplit, .send=tcp2PSend, .recv=tcp2PRecv, .flush=tcp2PFlush,
-      .cleanup = tcp2PCleanup},
+      .cleanup = tcp2PCleanup,
+      .sendGate=tcp2PSendGate, .recvGate=tcp2PRecvGate},
      .sock=0, .isClient=0, .needFlush=false, .bytes=0, .flushCount=0,
-     .parent=NULL};
+     .parent=NULL,  .buffer=NULL , .bufctr=0, .buf_cap=BUFFER_CAPACITY, .bufNeedFlush=false
+};
 
 static const tcp2PTransport tcp2PProfiledTransportTemplate
   = {{.maxParties=2, .split=tcp2PSplit, .send=tcp2PSendProfiled, .recv=tcp2PRecv,
-     .flush=tcp2PFlushProfiled, .cleanup = tcp2PCleanupProfiled},
+      .flush=tcp2PFlushProfiled, .cleanup = tcp2PCleanupProfiled,
+      .sendGate=tcp2PSendGate, .recvGate=tcp2PRecvGate},
      .sock=0, .isClient=0, .needFlush=false, .bytes=0, .flushCount=0,
-     .parent=NULL};
-
+     .parent=NULL,  .buffer=NULL , .bufctr=0, .buf_cap=BUFFER_CAPACITY, .bufNeedFlush=false
+};
+  
 // isClient value will only be used for the split() method, otherwise
 // its value doesn't matter. In that case, it indicates which party should be
 // the server vs. client for the new connections (which is usually the same as
@@ -199,11 +352,19 @@ static tcp2PTransport* tcp2PNew(int sock,bool isClient, bool isProfiled)
   trans->isClient=isClient;
   trans->sockStream=fdopen(sock, "rb+");
   trans->sinceFlush = 0;
+
   const int one=1;
   setsockopt(sock,IPPROTO_TCP,TCP_NODELAY,&one,sizeof(one));
-  /*setvbuf(trans->sockStream, trans->buffer, _IOFBF, BUFFER_SIZE);*/
+  //setsockopt(sock,IPPROTO_TCP,TCP_QUICKACK, &one,sizeof(one));
+  //setvbuf(trans->sockStream, trans->buffer, _IOFBF, BUFFER_SIZE);
+
+  // garbling buffer
+  trans->buffer = (char*)malloc(BUFFER_SIZE*sizeof(char));
+  // buffer pointer initialized in the template
+  
   return trans;
 }
+
 
 void protocolUseTcp2P(ProtocolDesc* pd,int sock,bool isClient)
 { 
@@ -226,6 +387,7 @@ void protocolUseTcp2PKeepAlive(ProtocolDesc* pd,int sock,bool isClient)
   t->keepAlive = true;
 }
 
+
 static int getsockaddr(const char* name,const char* port, struct sockaddr* res)
 {
   struct addrinfo *list, *iter;
@@ -245,6 +407,7 @@ static int tcpConnect(struct sockaddr_in* sa)
   return outsock;
 }
 
+
 int protocolConnectTcp2P(ProtocolDesc* pd,const char* server,const char* port)
 {
   struct sockaddr_in sa;
@@ -263,6 +426,7 @@ int protocolConnectTcp2PProfiled(ProtocolDesc* pd,const char* server,const char*
   return 0;
 }
 
+
 // used as sock=tcpListenAny(...); sock2=accept(sock); ...; close(both);
 static int tcpListenAny(const char* portn)
 {
@@ -280,6 +444,7 @@ static int tcpListenAny(const char* portn)
   if(listen(outsock,SOMAXCONN)<0) return -1;
   return outsock;
 }
+
 
 int protocolAcceptTcp2P(ProtocolDesc* pd,const char* port)
 {
@@ -300,6 +465,7 @@ int protocolAcceptTcp2PProfiled(ProtocolDesc* pd,const char* port)
   close(listenSock);
   return 0;
 }
+
 
 /*
    If two parties connected over a given socket execute this function
@@ -350,6 +516,7 @@ static ProtocolTransport* tcp2PSplit(ProtocolTransport* tsrc)
   return CAST(tnew);
 }
 
+/*
 typedef struct 
 { ProtocolTransport cb; 
   ProtocolDesc pd; 
@@ -381,7 +548,9 @@ static void sizeCheckCleanup(ProtocolTransport* pt)
   inner->cleanup(inner);
   free(pt);
 }
+*/
 
+/*
 void protocolAddSizeCheck(ProtocolDesc* pd)
 {
   SizeCheckTransportAdapter* t = malloc(sizeof(SizeCheckTransportAdapter));
@@ -391,6 +560,7 @@ void protocolAddSizeCheck(ProtocolDesc* pd)
   t->cb.recv=sizeCheckRecv;
   t->cb.cleanup=sizeCheckCleanup;
 }
+*/
 
 // --------------------------- Protocols -----------------------------------
 
@@ -774,6 +944,7 @@ void yaoGenrFeedOblivInputs(ProtocolDesc* pd
     free(buf0); free(buf1);
   }
 }
+
 void yaoEvalFeedOblivInputs(ProtocolDesc* pd
                            ,OblivInputs* oi,size_t n,int src)
 { OIBitSrc it = oiBitSrc(oi,n);
@@ -812,6 +983,7 @@ void yaoEvalFeedOblivInputs(ProtocolDesc* pd
   }
 }
 
+
 bool yaoGenrRevealOblivBits(ProtocolDesc* pd,
     widest_t* dest,const OblivBit* o,size_t n,int party)
 {
@@ -821,7 +993,7 @@ bool yaoGenrRevealOblivBits(ProtocolDesc* pd,
   for(i=0;i<n;++i) if(o[i].unknown)
     flipflags |= ((yaoKeyLsb(o[i].yao.w) != o[i].yao.inverted)?1LL<<i:0);
   // Assuming little endian
-  if(party != 1) osend(pd,2,&flipflags,bc);
+  if(party != 1) { osend(pd,2,&flipflags,bc); }
   if(party != 2) { orecv(pd,2,&rv,bc); rv^=flipflags; }
   for(i=0;i<n;++i) if(!o[i].unknown && o[i].knownValue)
     rv |= (1LL<<i);
@@ -839,7 +1011,7 @@ bool yaoEvalRevealOblivBits(ProtocolDesc* pd,
     flipflags |= (yaoKeyLsb(o[i].yao.w)?1LL<<i:0);
   // Assuming little endian
   if(party != 1) { orecv(pd,1,&rv,bc); rv^=flipflags; }
-  if(party != 2) osend(pd,1,&flipflags,bc);
+  if(party != 2) { osend(pd,1,&flipflags,bc); }
   for(i=0;i<n;++i) if(!o[i].unknown && o[i].knownValue)
     rv |= (1LL<<i);
   ypd->ocount+=n;
@@ -857,7 +1029,7 @@ bool yaoGenrRevealElGlBits(ProtocolDesc* pd,
   for(i=0;i<n;++i) if(o[i].unknown)
     flipflags |= ((yaoKeyLsb(o[i].yao.w) != o[i].yao.inverted)?1LL<<i:0);
   // Assuming little endian
-  if(party != 1) osend(pd,2,&flipflags,bc);
+  if(party != 1) { osend(pd,2,&flipflags,bc); }
   if(party != 2) { orecv(pd,2,&rv,bc); rv^=flipflags; }
   for(i=0;i<n;++i) if(!o[i].unknown && o[i].knownValue)
     rv |= (1LL<<i);
@@ -876,7 +1048,7 @@ bool yaoEvalRevealElGlBits(ProtocolDesc* pd,
     flipflags |= (yaoKeyLsb(o[i].yao.w)?1LL<<i:0);
   // Assuming little endian
   if(party != 1) { orecv(pd,1,&rv,bc); rv^=flipflags; }
-  if(party != 2) osend(pd,1,&flipflags,bc);
+  if(party != 2) { osend(pd,1,&flipflags,bc); }
   for(i=0;i<n;++i) if(!o[i].unknown && o[i].knownValue)
     rv |= (1LL<<i);
   ypd->ocount+=n;
@@ -987,7 +1159,11 @@ void yaoGenerateHalfGatePair(ProtocolDesc* pd, OblivBit* r,
   yaoKeyCopy(wg,(pa?t:row));
   yaoKeyXor (row,t);
   yaoKeyCondXor(row,(pb!=bc),row,ypd->R);
+  #ifdef BATCH_GATES
+  gateSend(pd,2,row,YAO_KEY_BYTES);;
+  #else
   osend(pd,2,row,YAO_KEY_BYTES);
+  #endif
   yaoKeyCondXor(wg,((pa!=ac)&&(pb!=bc))!=rc,wg,ypd->R);
   ypd->gcount++;
 
@@ -997,7 +1173,11 @@ void yaoGenerateHalfGatePair(ProtocolDesc* pd, OblivBit* r,
   yaoKeyCopy(we,(pb?t:row));
   yaoKeyXor (row,t);
   yaoKeyXor (row,(ac?wa1:wa0));
+  #ifdef BATCH_GATES
+  gateSend(pd,2,row,YAO_KEY_BYTES);;
+  #else
   osend(pd,2,row,YAO_KEY_BYTES);
+  #endif
   ypd->gcount++;
 
   // r may alias a and b, so modify at the end
@@ -1023,11 +1203,19 @@ void yaoEvaluateHalfGatePair(ProtocolDesc* pd, OblivBit* r,
   yao_key_t row,t,wg,we;
 
   yaoSetHalfMask(ypd,t,a->yao.w,ypd->gcount++);
+#ifdef BATCH_GATES
+  gateRecv(pd,1,row,YAO_KEY_BYTES);
+#else
   orecv(pd,1,row,YAO_KEY_BYTES);
+#endif
   yaoKeyCondXor(wg,yaoKeyLsb(a->yao.w),t,row);
 
   yaoSetHalfMask(ypd,t,b->yao.w,ypd->gcount++);
+#ifdef BATCH_GATES
+  gateRecv(pd,1,row,YAO_KEY_BYTES);
+#else
   orecv(pd,1,row,YAO_KEY_BYTES);
+#endif
   yaoKeyXor(row,a->yao.w);
   yaoKeyCondXor(we,yaoKeyLsb(b->yao.w),t,row);
 
@@ -1045,6 +1233,16 @@ uint64_t yaoGateCount()
     return rv/2;
   else return rv;
 }
+
+uint64_t yaoUtilCount()
+{ uint64_t rv = ((YaoProtocolDesc*)currentProto->extra)->utilcount - ((YaoProtocolDesc*)currentProto->extra)->gcount_offset;
+  if(currentProto->setBitAnd==yaoGenerateAndPair
+      || currentProto->setBitAnd==yaoEvaluateHalfGatePair) // halfgate
+    return rv/2;
+  else return rv;
+}
+
+
 
 // FIXME don't like this convention: OT should have used transport
 // objects directly, instead of being wrapped in ProtocolDesc
@@ -1104,8 +1302,9 @@ void setupYaoProtocol(ProtocolDesc* pd,bool halfgates)
   pd->feedOblivInputs = (me==1?yaoGenrFeedOblivInputs:yaoEvalFeedOblivInputs);
   pd->revealOblivBits = (me==1?yaoGenrRevealOblivBits:yaoEvalRevealOblivBits);
   pd->revealOblivElGlBits = (me==1?yaoGenrRevealElGlBits:yaoEvalRevealElGlBits);
+
   if(halfgates)
-  { pd->setBitAnd = (me==1?yaoGenerateAndPair:yaoEvaluateHalfGatePair);
+    { pd->setBitAnd = (me==1?yaoGenerateAndPair:yaoEvaluateHalfGatePair);
     pd->setBitOr  = (me==1?yaoGenerateOrPair :yaoEvaluateHalfGatePair);
   }else
   { ypd->nonFreeGate = (me==1?yaoGenerateGate:yaoEvaluateGate);
@@ -1136,6 +1335,7 @@ void mainYaoProtocol(ProtocolDesc* pd, bool point_and_permute,
   int me = pd->thisParty;
   ypd->ownOT=false;
   ypd->gcount = ypd->gcount_offset = ypd->icount = ypd->ocount = 0;
+  
   if(me==1)
   {
     gcry_randomize(ypd->R,YAO_KEY_BYTES,GCRY_STRONG_RANDOM);
@@ -1161,6 +1361,8 @@ void cleanupYaoProtocol(ProtocolDesc* pd)
   YaoProtocolDesc* ypd = pd->extra;
   gcry_cipher_close(ypd->fixedKeyCipher);
   yaoReleaseOt(pd, pd->thisParty);
+  // ben edit TODO
+  // free garbling buffer
   free(ypd);
   pd->extra = NULL;
 }

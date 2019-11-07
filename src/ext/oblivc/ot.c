@@ -10,9 +10,10 @@
 #include<time.h>
 #include<stdio.h>
 
-#include<bcrandom.h>
 #include<obliv_common.h>
+#include<bcrandom.h>
 #include<obliv_types.h>
+
 #include<commitReveal.h>
 #define HERE printf("%s:%d\n",__FILE__,__LINE__)
 
@@ -263,7 +264,7 @@ static void npotSend_roundSendData(NpotSender* s,NpotSenderState* q,
   char buf[HASH_BYTES];
   gcry_mpi_point_t PK0,PKi;
   PK0 = q->PK0;
-
+  
   PKi = gcry_mpi_point_new(0);
   gcry_mpi_ec_mul(PK0,s->r,PK0,s->ctx);
   oneTimePad(buf,arr[0],len,PK0,s->R,0,s->ctx,s->scratchx,s->scratchy);

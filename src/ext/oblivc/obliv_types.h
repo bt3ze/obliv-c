@@ -114,6 +114,7 @@ typedef struct YaoProtocolDesc {
   yao_key_t R,I; // LSB of R needs to be 1
   uint64_t gcount, gcount_offset;
   uint64_t icount, ocount;
+  uint64_t utilcount;
   bool ownOT;
   void (*nonFreeGate)(struct ProtocolDesc*,OblivBit*,char,
       const OblivBit*,const OblivBit*);
@@ -134,6 +135,8 @@ struct ProtocolTransport {
   ProtocolTransport* (*split)(ProtocolTransport*);
   int (*send)(ProtocolTransport*,int,const void*,size_t);
   int (*recv)(ProtocolTransport*,int,      void*,size_t);
+  int (*sendGate)(ProtocolTransport*,int,const void*,size_t); // for batching gates only
+  int (*recvGate)(ProtocolTransport*,int,      void*,size_t); // for batching gates only
   int (*flush)(ProtocolTransport*);
   void (*cleanup)(ProtocolTransport*);
 };
