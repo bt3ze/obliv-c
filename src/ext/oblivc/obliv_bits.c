@@ -18,7 +18,7 @@
 #include <gcrypt.h>
 
 
-//#define BATCH_GATES
+#define BATCH_GATES
 #define BUFFER_CAPACITY 10000
 #define BUFFER_SIZE BUFFER_CAPACITY*YAO_KEY_BYTES
 
@@ -358,9 +358,11 @@ static tcp2PTransport* tcp2PNew(int sock,bool isClient, bool isProfiled)
   //setsockopt(sock,IPPROTO_TCP,TCP_QUICKACK, &one,sizeof(one));
   //setvbuf(trans->sockStream, trans->buffer, _IOFBF, BUFFER_SIZE);
 
+#ifdef BATCH_GATES
   // garbling buffer
   trans->buffer = (char*)malloc(BUFFER_SIZE*sizeof(char));
   // buffer pointer initialized in the template
+#endif
   
   return trans;
 }
@@ -815,6 +817,8 @@ void yaoSetHalfMask(YaoProtocolDesc* ypd,
   int i;
   assert(YAO_KEY_BYTES<=FIXED_KEY_BLOCKLEN);
   for(i=YAO_KEY_BYTES;i<FIXED_KEY_BLOCKLEN;++i) buf[i]=0;
+  // bennote: might be able to speed up the previous line with memset
+  // (as below)
   yaoKeyCopy(buf,a); yaoKeyDouble(buf);
   for(i=0;i<sizeof(k);++i) buf[i]^=((k>>8*i)&0xff);
   gcry_cipher_encrypt(ypd->fixedKeyCipher,obuf,sizeof(obuf),buf,sizeof(buf));
@@ -834,7 +838,7 @@ void yaoSetHalfMask2(YaoProtocolDesc* ypd,
   char *obuf;
   const int blen=FIXED_KEY_BLOCKLEN;
   int i,j;
-  assert(YAO_KEY_BYTES<=FIXED_KEY_BLOCKLEN);
+  // assert(YAO_KEY_BYTES<=FIXED_KEY_BLOCKLEN); // this check is fine but seems unnecessary
 
   if(YAO_KEY_BYTES==blen && d2==d1+YAO_KEY_BYTES)
     obuf=d1; // eliminate redundant yaoKeyCopy later
@@ -1363,6 +1367,9 @@ void cleanupYaoProtocol(ProtocolDesc* pd)
   yaoReleaseOt(pd, pd->thisParty);
   // ben edit TODO
   // free garbling buffer
+#ifdef BATCH_GATES
+  
+#endif
   free(ypd);
   pd->extra = NULL;
 }
